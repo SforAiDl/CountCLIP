@@ -4,7 +4,7 @@ import random
 import argparse
 import numpy as np
 from tqdm import tqdm
-from math import exp, floor
+from math import floor
 import matplotlib.pyplot as plt
 from dataset import CountSubset, NonCountSubset, split
 import clip
@@ -72,8 +72,8 @@ class Experiment:
             If True, then only run on 64 samples. **(overfitting test)**
         """
         # Load data
-        self.count_data = np.load("segments0.npy", allow_pickle=True)
-        self.noncount_data = np.load("segments1.npy", allow_pickle=True) #FIXME: Change this to segments1.npy
+        self.count_data = np.load("data/counting_final_new.npy", allow_pickle=True)
+        self.noncount_data = np.load("data/noncounting_final.npy", allow_pickle=True)
         # dataframe = dataframe # reduce size for faster training
         if train_args.clip:
             dataframe = dataframe[:50]
@@ -504,7 +504,7 @@ if __name__ == "__main__":
         "-s",
         "--train_size",
         type=float,
-        default=0.5,
+        default=0.8,
         help="Train size, 0 < train_size < 1.",
     )
     parser.add_argument("-b", "--batch_size", type=int, default=32, help="Batch size.")

@@ -1,10 +1,13 @@
+from PIL import Image
 import numpy as np
+import copy
 
 import torch
 from torch.utils.data import Dataset
 
 import clip
 import requests
+import urllib.request as req
 from datetime import datetime
 
 _, preprocess = clip.load('ViT-L/14')
@@ -55,12 +58,14 @@ class CountSubset(Dataset):
     
     def __getitem__(self, idx: int) -> torch.Tensor:
         while True:
-            valid_or_not = verify_url(self.data[idx][0])
+            valid_or_not = verify_url(self.true_data[idx][0])
             if valid_or_not:
                 break
             else:
-                idx = np.random.randint(0, len(self.data))
-        img = preprocess(self.true_data[idx][0])
+                print(f"URL {self.true_data[idx][0]} is not valid.")
+                idx = np.random.randint(0, len(self.true_data))
+        req.urlretrieve(self.true_data[idx][0], 'images/temp.jpg')
+        img = preprocess(Image.open('images/temp.jpg'))
         caption = self.true_data[idx][1]
         counterfactual_caption = self.false_data[idx][1]
 
@@ -69,17 +74,25 @@ class CountSubset(Dataset):
     def process(self) -> tuple:
         new_true_data = []
         new_false_data = []
+        count = 0
         for i in range(len(self.data)):
             assert type(self.data[i][1]) == str
             img_url = self.data[i][1]
             assert type(self.data[i][2]) == str
             caption = self.data[i][2].lower()
             # put a false number in the caption
-            counterfactual_caption = caption.copy().replace(NUM_TO_TEXT[self.data[i][3]], NUM_TO_TEXT[np.random.randint(1, 11)])
+            counterfactual_caption = copy.deepcopy(caption).replace(NUM_TO_TEXT[self.data[i][3]], NUM_TO_TEXT[np.random.randint(1, 11)])
+            try:
+                tokenized = clip.tokenize(caption)
+                counterfactual_tokenized = clip.tokenize(counterfactual_caption)
+            except Exception as e:
+                count += 1
+                continue
 
-            new_true_data.append((img_url, clip.tokenize(caption)))
-            new_false_data.append((img_url, clip.tokenize(counterfactual_caption)))
+            new_true_data.append((img_url, tokenized))
+            new_false_data.append((img_url, counterfactual_tokenized))
 
+        print("Exceptions : ", count)
         return new_true_data, new_false_data
     
 class NonCountSubset(Dataset):
@@ -100,16 +113,19 @@ class NonCountSubset(Dataset):
     
     def __getitem__(self, idx: int) -> torch.Tensor:
         while True:
-            valid_or_not = verify_url(self.data[idx][0])
+            valid_or_not = verify_url(self.data[idx][1])
             if valid_or_not:
                 break
             else:
                 idx = np.random.randint(0, len(self.data))
-        img = preprocess(self.true_data[idx][0])
-        caption = self.true_data[idx][1]
+        req.urlretrieve(self.data[idx][1], 'images/temp.jpg')
+        img = preprocess(Image.open('images/temp.jpg'))
+        caption = clip.tokenize(self.data[idx][2])
 
         return img, caption
   
 if __name__ == '__main__':
-    dataset = CountSubset()
-    print(dataset[0])
+    # Load the .npy file
+    data = np.load('data/noncounting_final.npy', allow_pickle=True)
+    count_data = NonCountSubset(data)
+    print(count_data[0])
