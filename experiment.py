@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from math import exp, floor
+import matplotlib.pyplot as plt
 from dataset import CountSubset, NonCountSubset, split
 import clip
 
@@ -19,6 +20,14 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
+loss_total_val = {}
+loss_total_train = {}
+
+loss_clip_val = {}
+loss_clip_train = {}
+
+loss_count_val = {}
+loss_count_train = {}
 
 def ddp_setup():
     # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:1024"
@@ -339,14 +348,17 @@ class Experiment:
                         f"Epoch [{epoch + i/(total_steps)}] | Total loss [{sum(epoch_total_loss)/len(epoch_total_loss) :.5f}].",
                         flush=True,
                     )
+                    loss_total_train.update({epoch+(i/total_steps):epoch_total_loss})
                     print(
                         f"Epoch [{epoch + i/(total_steps)}] | Contrastive loss [{sum(epoch_ce_loss)/len(epoch_ce_loss) :.5f}].",
                         flush=True,
                     )
+                    loss_clip_train.update({epoch+(i/total_steps):epoch_ce_loss})
                     print(
                         f"Epoch [{epoch + i/(total_steps)}] | Counting loss [{sum(epoch_count_loss)/len(epoch_count_loss) :.5f}].",
                         flush=True,
                     )
+                    loss_count_train.update({epoch+(i/total_steps):epoch_count_loss})
 
                 val_total_loss, _, _ = self._evaluate(epoch + i / (total_steps))
                 if val_total_loss < self.cur_min_loss:
@@ -365,14 +377,17 @@ class Experiment:
                 f"Epoch [{epoch + 1}] | Total loss [{epoch_total_loss :.5f}].",
                 flush=True,
             )
+            loss_total_train.update({epoch+1:epoch_total_loss})
             print(
                 f"Epoch [{epoch + 1}] | Contrastive loss [{epoch_ce_loss :.5f}].",
                 flush=True,
             )
+            loss_clip_train.update({epoch+1:epoch_ce_loss})
             print(
                 f"Epoch [{epoch + 1}] | Counting loss [{epoch_count_loss :.5f}].",
                 flush=True,
             )
+            loss_count_train.update({epoch+1:epoch_count_loss})
 
         return
 
@@ -405,14 +420,17 @@ class Experiment:
                     f"Epoch [{epoch}] | Total loss [{sum(eval_epoch_total_loss)/len(eval_epoch_total_loss) :.5f}].",
                     flush=True,
                 )
+                loss_total_val.update({epoch:sum(eval_epoch_total_loss)/len(eval_epoch_total_loss)})
                 print(
                     f"Epoch [{epoch}] | Contrastive loss [{sum(eval_epoch_ce_loss)/len(eval_epoch_ce_loss) :.5f}].",
                     flush=True,
                 )
+                loss_clip_val.update({epoch:sum(eval_epoch_ce_loss)/len(eval_epoch_ce_loss)})
                 print(
                     f"Epoch [{epoch}] | Counting loss [{sum(eval_epoch_count_loss)/len(eval_epoch_count_loss) :.5f}].",
                     flush=True,
                 )
+                loss_count_val.update({epoch:sum(eval_epoch_count_loss)/len(eval_epoch_count_loss)})
 
             self.model.module.train()
             total_loss = sum(eval_epoch_total_loss) / len(eval_epoch_total_loss)
@@ -579,46 +597,46 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(2, 2, figsize=(10, 10))
     ax1 = axs[0, 0]
     ax2 = axs[0, 1]
-    ax3 = axs[1, 0]
-    ax4 = axs[1, 1]
+    ax3 = axs[1, 1]
 
     ax1.plot(
-        list(train_ret_step_losses.keys()),
-        list(train_ret_step_losses.values()),
+        list(loss_total_train.keys()),
+        list(loss_total_train.values()),
         label="Train",
     )
-    ax1.plot(list(eval_ret_losses.keys()), list(eval_ret_losses.values()), label="Eval")
+    ax1.plot(list(loss_total_val.keys()), list(loss_total_val.values()), label="Eval")
     ax1.legend()
-    ax1.set_title("Train and Eval Retrieval loss vs Epoch-steps")
+    ax1.set_title("Train and Eval total loss vs Epoch-steps")
     ax1.title.set_size(10)
 
     ax2.plot(
-        list(train_cap_step_losses.keys()),
-        list(train_cap_step_losses.values()),
+        list(loss_clip_train.keys()),
+        list(loss_clip_train.values()),
         label="Train",
     )
-    ax2.plot(list(eval_cap_losses.keys()), list(eval_cap_losses.values()), label="Eval")
+    ax2.plot(list(loss_clip_val.keys()), list(loss_clip_val.values()), label="Eval")
     ax2.legend()
-    ax2.set_title("Train and Eval Captioning loss vs Epoch-steps")
+    ax2.set_title("Train and Eval clip loss vs Epoch-steps")
     ax2.title.set_size(10)
 
-    ax3.plot(list(eval_aucs.keys()), list(eval_aucs.values()), label="Eval AUC")
-    ax3.set_title("Eval AUC vs Epoch-steps")
-    ax3.title.set_size(10)
 
-    ax4.plot(
-        list(train_ret_sim_step_losses.keys()),
-        list(train_ret_sim_step_losses.values()),
-        label="Train Ret Sim",
+    # ax3.plot(list(eval_aucs.keys()), list(eval_aucs.values()), label="Eval AUC")
+    # ax3.set_title("Eval AUC vs Epoch-steps")
+    # ax3.title.set_size(10)
+
+    ax3.plot(
+        list(loss_count_train.keys()),
+        list(loss_count_train.values()),
+        label="Train",
     )
-    ax4.plot(
-        list(train_ret_lm_step_losses.keys()),
-        list(train_ret_lm_step_losses.values()),
-        label="Train Ret LM",
+    ax3.plot(
+        list(loss_count_val.keys()),
+        list(loss_count_val.values()),
+        label="Val",
     )
-    ax4.legend()
-    ax4.set_title("Train and Eval Retrieval and Captioning loss vs Epochs")
-    ax4.title.set_size(10)
+    ax3.legend()
+    ax3.set_title("Train and Eval Retrieval and Captioning loss vs Epochs")
+    ax3.title.set_size(10)
 
     global SAVE_PATH
     plt.savefig("plots/" + SAVE_PATH + ".png")
