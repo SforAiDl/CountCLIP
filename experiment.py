@@ -29,6 +29,7 @@ loss_clip_train = {}
 loss_count_val = {}
 loss_count_train = {}
 
+
 def ddp_setup():
     # os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:1024"
     init_process_group(backend="nccl")
@@ -75,34 +76,41 @@ class Experiment:
         self.count_data = np.load("data/counting_final_new.npy", allow_pickle=True)
         self.noncount_data = np.load("data/noncounting_final.npy", allow_pickle=True)
         # dataframe = dataframe # reduce size for faster training
-        if train_args.clip:
-            dataframe = dataframe[:50]
+        # if train_args.clip:
+        #     dataframe = dataframe[:50]
 
         # Dataset
         train_count_data, val_count_data = split(self.count_data, train_args.train_size)
-        train_noncount_data, val_noncount_data = split(self.noncount_data, train_args.train_size)
+        train_noncount_data, val_noncount_data = split(
+            self.noncount_data, train_args.train_size
+        )
 
         # Device
         device = int(os.environ["LOCAL_RANK"])
         self.device = device
 
-        train_count_data, val_count_data = CountSubset(train_count_data), CountSubset(val_count_data)
-        train_noncount_data, val_noncount_data = NonCountSubset(train_noncount_data), NonCountSubset(val_noncount_data)
+        train_count_data, val_count_data = CountSubset(train_count_data), CountSubset(
+            val_count_data
+        )
+        train_noncount_data, val_noncount_data = NonCountSubset(
+            train_noncount_data
+        ), NonCountSubset(val_noncount_data)
 
         # Instantiate model
         self.model, self.preprocess = clip.load(model_args.version)
-        assert type(self.model) == nn.Module, "Model is not a nn.Module."
+        # print(self.model)
+        # assert type(self.model) == nn.Module, "Model is not a nn.Module."
 
         train_count_data_loader = DataLoader(
             train_count_data,
-            batch_size=train_args.batch_size/train_args.c_ratio,
+            batch_size= int(train_args.batch_size // train_args.c_ratio),
             shuffle=False,
             sampler=DistributedSampler(train_count_data),
             pin_memory=True,
         )
         val_count_data_loader = DataLoader(
             val_count_data,
-            batch_size=train_args.batch_size/train_args.c_ratio,
+            batch_size= int(train_args.batch_size // train_args.c_ratio),
             shuffle=False,
             sampler=DistributedSampler(val_count_data),
             pin_memory=True,
@@ -122,8 +130,14 @@ class Experiment:
             pin_memory=True,
         )
 
-        self.train_count_data, self.val_count_data = train_count_data_loader, val_count_data_loader
-        self.train_noncount_data, self.val_noncount_data = train_noncount_data_loader, val_noncount_data_loader
+        self.train_count_data, self.val_count_data = (
+            train_count_data_loader,
+            val_count_data_loader,
+        )
+        self.train_noncount_data, self.val_noncount_data = (
+            train_noncount_data_loader,
+            val_noncount_data_loader,
+        )
 
         # Model
         if train_args.precision == "bf16":
@@ -171,7 +185,7 @@ class Experiment:
         self.weight_decay = train_args.weight_decay
         self.lr = train_args.learning_rate
         self.snapshot_path = train_args.path
-        self.dataframe = dataframe
+        # self.dataframe = train_args.dataframe
         self.device = device
         self.model = self.model.to(self.device)
         self.no_save = train_args.no_save
@@ -255,7 +269,15 @@ class Experiment:
             self.snapshot_path = snapshot_path
         return
 
-    def _run_batch(self, count_imgs, count_texts, counterfactual_count_text, non_count_images, non_count_text, i):
+    def _run_batch(
+        self,
+        count_imgs,
+        count_texts,
+        counterfactual_count_text,
+        non_count_images,
+        non_count_text,
+        i,
+    ):
 
         if i == 10:
             start = time.time()
@@ -264,29 +286,37 @@ class Experiment:
         non_count_len = len(non_count_images)
 
         imgs = torch.cat((count_imgs, non_count_images), dim=0)
-        texts = torch.cat((count_texts, non_count_text, counterfactual_count_text), dim=0)
+        texts = torch.cat(
+            (count_texts, non_count_text, counterfactual_count_text), dim=0
+        )
 
         encoded_imgs = self.model.encode_image(imgs)
         encoded_texts = self.model.encode_text(texts)
 
         count_images_encoding = encoded_imgs[:count_len]
         count_texts_encoding = encoded_texts[:count_len]
-        counterfactual_text_encoding = encoded_texts[count_len + non_count_len:]
+        counterfactual_text_encoding = encoded_texts[count_len + non_count_len :]
 
         # Counting loss, dot product of image and text embeddings
         numerator = torch.exp(count_images_encoding * count_texts_encoding)
         assert numerator.dim() == 1, "Numerator has more than 1 dimension."
         # dot product of image and counterfactual text embeddings + numerator, and maximize this
-        denominator = numerator + torch.exp(count_images_encoding * counterfactual_text_encoding)
+        denominator = numerator + torch.exp(
+            count_images_encoding * counterfactual_text_encoding
+        )
         assert denominator.dim() == 1, "Denominator has more than 1 dimension."
 
         # Standard CLIP loss
-        img_logits = encoded_imgs @ encoded_texts[:count_len + non_count_len].t()
+        img_logits = encoded_imgs @ encoded_texts[: count_len + non_count_len].t()
         text_logits = img_logits.t()
 
-        labels = torch.arange(0, count_len + non_count_len).to(dtype=torch.long, device=self.device)
+        labels = torch.arange(0, count_len + non_count_len).to(
+            dtype=torch.long, device=self.device
+        )
 
-        ce_loss = (F.cross_entropy(img_logits, labels) + F.cross_entropy(text_logits, labels)) / 2
+        ce_loss = (
+            F.cross_entropy(img_logits, labels) + F.cross_entropy(text_logits, labels)
+        ) / 2
         count_loss = -torch.log(numerator / denominator).mean()
 
         loss = ce_loss + self.lambda_ * count_loss
@@ -297,23 +327,32 @@ class Experiment:
             end = time.time()
             print(f"Time taken for 10th iteration: {end - start} seconds.")
 
-        if (i + 1) % self.accumulate_steps == 0 or i == self.total_steps - 1:  # Accumulate gradients over 4 steps
+        if (
+            i + 1
+        ) % self.accumulate_steps == 0 or i == self.total_steps - 1:  # Accumulate gradients over 4 steps
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-        return (loss.item(), ce_loss.item(), count_loss.item()) # return loss for logging
+        return (
+            loss.item(),
+            ce_loss.item(),
+            count_loss.item(),
+        )  # return loss for logging
 
     def _run_epoch(self, epoch):
         global SAVE_PATH
+        train_data = next(iter(self.train_count_data))[0] + next(iter(self.train_noncount_data))[0]
+        b_sz = len(train_data)
 
-        b_sz = len(next(iter(self.train_data))[0])
         print(
-            f"[GPU{self.device}] Epoch {epoch} | Batchsize: {b_sz} | Steps: {len(self.train_data)}"
+            f"[GPU{self.device}] Epoch {epoch} | Batchsize: {b_sz} | Steps: {len(train_data)}"
         )
-        total_steps = len(self.train_data)
+
+        total_steps = len(self.train_count_data) + len(self.train_noncount_data)
         self.total_steps = total_steps
         total_steps_mod_x = total_steps // self.eval_every
-        self.train_data.sampler.set_epoch(floor(epoch))
+        self.train_count_dataloader.sampler.set_epoch(floor(epoch))
+        self.train_noncount_dataloader.sampler.set_epoch(floor(epoch))
         epoch_total_loss = []
         epoch_ce_loss = []
         epoch_count_loss = []
@@ -323,7 +362,13 @@ class Experiment:
             cur_i = floor((epoch - floor(epoch)) * total_steps)
             epoch = floor(epoch)
 
-        for i, ((count_imgs, count_texts, counterfactual_count_text), (non_count_images, non_count_text)) in tqdm(enumerate(zip(self.train_count_data, self.train_noncount_data)), desc="Training"):
+        for i, (
+            (count_imgs, count_texts, counterfactual_count_text),
+            (non_count_images, non_count_text),
+        ) in tqdm(
+            enumerate(zip(self.train_count_data, self.train_noncount_data)),
+            desc="Training",
+        ):
 
             if i < cur_i:  # helps when training is interrupted in-between epochs
                 continue
@@ -331,11 +376,20 @@ class Experiment:
             if torch.cuda.is_available():
                 count_imgs = count_imgs.cuda(self.device, non_blocking=True)
                 count_texts = count_texts.cuda(self.device, non_blocking=True)
-                counterfactual_count_text = counterfactual_count_text.cuda(self.device, non_blocking=True)
+                counterfactual_count_text = counterfactual_count_text.cuda(
+                    self.device, non_blocking=True
+                )
                 non_count_images = non_count_images.cuda(self.device, non_blocking=True)
                 non_count_text = non_count_text.cuda(self.device, non_blocking=True)
 
-            total_loss, contrastive_loss, counting_loss = self._run_batch(count_imgs, count_texts, counterfactual_count_text, non_count_images, non_count_text, i)
+            total_loss, contrastive_loss, counting_loss = self._run_batch(
+                count_imgs,
+                count_texts,
+                counterfactual_count_text,
+                non_count_images,
+                non_count_text,
+                i,
+            )
             epoch_total_loss.append(total_loss)
             epoch_ce_loss.append(contrastive_loss)
             epoch_count_loss.append(counting_loss)
@@ -348,17 +402,21 @@ class Experiment:
                         f"Epoch [{epoch + i/(total_steps)}] | Total loss [{sum(epoch_total_loss)/len(epoch_total_loss) :.5f}].",
                         flush=True,
                     )
-                    loss_total_train.update({epoch+(i/total_steps):epoch_total_loss})
+                    loss_total_train.update(
+                        {epoch + (i / total_steps): epoch_total_loss}
+                    )
                     print(
                         f"Epoch [{epoch + i/(total_steps)}] | Contrastive loss [{sum(epoch_ce_loss)/len(epoch_ce_loss) :.5f}].",
                         flush=True,
                     )
-                    loss_clip_train.update({epoch+(i/total_steps):epoch_ce_loss})
+                    loss_clip_train.update({epoch + (i / total_steps): epoch_ce_loss})
                     print(
                         f"Epoch [{epoch + i/(total_steps)}] | Counting loss [{sum(epoch_count_loss)/len(epoch_count_loss) :.5f}].",
                         flush=True,
                     )
-                    loss_count_train.update({epoch+(i/total_steps):epoch_count_loss})
+                    loss_count_train.update(
+                        {epoch + (i / total_steps): epoch_count_loss}
+                    )
 
                 val_total_loss, _, _ = self._evaluate(epoch + i / (total_steps))
                 if val_total_loss < self.cur_min_loss:
@@ -370,26 +428,27 @@ class Experiment:
 
         epoch_total_loss = sum(epoch_total_loss) / len(epoch_total_loss)
         epoch_ce_loss = sum(epoch_ce_loss) / len(epoch_ce_loss)
-        epoch_count_loss = sum(epoch_count_loss) / len(epoch_count_loss)        
+        epoch_count_loss = sum(epoch_count_loss) / len(epoch_count_loss)
 
         if self.device == 0:
             print(
                 f"Epoch [{epoch + 1}] | Total loss [{epoch_total_loss :.5f}].",
                 flush=True,
             )
-            loss_total_train.update({epoch+1:epoch_total_loss})
+            loss_total_train.update({epoch + 1: epoch_total_loss})
             print(
                 f"Epoch [{epoch + 1}] | Contrastive loss [{epoch_ce_loss :.5f}].",
                 flush=True,
             )
-            loss_clip_train.update({epoch+1:epoch_ce_loss})
+            loss_clip_train.update({epoch + 1: epoch_ce_loss})
             print(
                 f"Epoch [{epoch + 1}] | Counting loss [{epoch_count_loss :.5f}].",
                 flush=True,
             )
-            loss_count_train.update({epoch+1:epoch_count_loss})
+            loss_count_train.update({epoch + 1: epoch_count_loss})
 
         return
+
 
     def _evaluate(self, epoch):
 
@@ -401,16 +460,33 @@ class Experiment:
             eval_epoch_count_loss = []
             self.val_data.sampler.set_epoch(floor(epoch))
 
-            for i, ((count_imgs, count_texts, counterfactual_count_text), (non_count_images, non_count_text)) in tqdm(enumerate(zip(self.val_count_data, self.val_noncount_data)), desc="Evaluation"):
+            for i, (
+                (count_imgs, count_texts, counterfactual_count_text),
+                (non_count_images, non_count_text),
+            ) in tqdm(
+                enumerate(zip(self.val_count_data, self.val_noncount_data)),
+                desc="Evaluation",
+            ):
 
                 if torch.cuda.is_available():
                     count_imgs = count_imgs.cuda(self.device, non_blocking=True)
                     count_texts = count_texts.cuda(self.device, non_blocking=True)
-                    counterfactual_count_text = counterfactual_count_text.cuda(self.device, non_blocking=True)
-                    non_count_images = non_count_images.cuda(self.device, non_blocking=True)
+                    counterfactual_count_text = counterfactual_count_text.cuda(
+                        self.device, non_blocking=True
+                    )
+                    non_count_images = non_count_images.cuda(
+                        self.device, non_blocking=True
+                    )
                     non_count_text = non_count_text.cuda(self.device, non_blocking=True)
 
-                total_loss, contrastive_loss, counting_loss = self._run_batch(count_imgs, count_texts, counterfactual_count_text, non_count_images, non_count_text, i)
+                total_loss, contrastive_loss, counting_loss = self._run_batch(
+                    count_imgs,
+                    count_texts,
+                    counterfactual_count_text,
+                    non_count_images,
+                    non_count_text,
+                    i,
+                )
                 eval_epoch_total_loss.append(total_loss)
                 eval_epoch_ce_loss.append(contrastive_loss)
                 eval_epoch_count_loss.append(counting_loss)
@@ -420,17 +496,23 @@ class Experiment:
                     f"Epoch [{epoch}] | Total loss [{sum(eval_epoch_total_loss)/len(eval_epoch_total_loss) :.5f}].",
                     flush=True,
                 )
-                loss_total_val.update({epoch:sum(eval_epoch_total_loss)/len(eval_epoch_total_loss)})
+                loss_total_val.update(
+                    {epoch: sum(eval_epoch_total_loss) / len(eval_epoch_total_loss)}
+                )
                 print(
                     f"Epoch [{epoch}] | Contrastive loss [{sum(eval_epoch_ce_loss)/len(eval_epoch_ce_loss) :.5f}].",
                     flush=True,
                 )
-                loss_clip_val.update({epoch:sum(eval_epoch_ce_loss)/len(eval_epoch_ce_loss)})
+                loss_clip_val.update(
+                    {epoch: sum(eval_epoch_ce_loss) / len(eval_epoch_ce_loss)}
+                )
                 print(
                     f"Epoch [{epoch}] | Counting loss [{sum(eval_epoch_count_loss)/len(eval_epoch_count_loss) :.5f}].",
                     flush=True,
                 )
-                loss_count_val.update({epoch:sum(eval_epoch_count_loss)/len(eval_epoch_count_loss)})
+                loss_count_val.update(
+                    {epoch: sum(eval_epoch_count_loss) / len(eval_epoch_count_loss)}
+                )
 
             self.model.module.train()
             total_loss = sum(eval_epoch_total_loss) / len(eval_epoch_total_loss)
@@ -618,7 +700,6 @@ if __name__ == "__main__":
     ax2.legend()
     ax2.set_title("Train and Eval clip loss vs Epoch-steps")
     ax2.title.set_size(10)
-
 
     # ax3.plot(list(eval_aucs.keys()), list(eval_aucs.values()), label="Eval AUC")
     # ax3.set_title("Eval AUC vs Epoch-steps")
