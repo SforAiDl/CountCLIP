@@ -72,7 +72,7 @@ class Experiment:
             If True, then only run on 64 samples. **(overfitting test)**
         """
         # Load data
-        self.count_data = np.load("segments0.npy", allow_pickle=True)
+        self.count_data = np.load("data/counting_final.npy", allow_pickle=True)
         self.noncount_data = np.load("segments1.npy", allow_pickle=True) #FIXME: Change this to segments1.npy
         # dataframe = dataframe # reduce size for faster training
         if train_args.clip:
