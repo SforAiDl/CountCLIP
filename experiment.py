@@ -4,7 +4,7 @@ import random
 import argparse
 import numpy as np
 from tqdm import tqdm
-from math import exp, floor
+from math import floor
 import matplotlib.pyplot as plt
 from dataset import CountSubset, NonCountSubset, split
 import clip
