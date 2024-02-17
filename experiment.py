@@ -75,6 +75,8 @@ class Experiment:
         # Load data
         self.count_data = np.load("data/counting_final_new.npy", allow_pickle=True)
         self.noncount_data = np.load("data/noncounting_final.npy", allow_pickle=True)
+        self.count_data = self.count_data[:3]
+        self.noncount_data = self.noncount_data[:3]
         # dataframe = dataframe # reduce size for faster training
         # if train_args.clip:
         #     dataframe = dataframe[:50]
@@ -138,6 +140,8 @@ class Experiment:
             train_noncount_data_loader,
             val_noncount_data_loader,
         )
+
+        
 
         # Model
         if train_args.precision == "bf16":
@@ -341,18 +345,25 @@ class Experiment:
 
     def _run_epoch(self, epoch):
         global SAVE_PATH
-        train_data = next(iter(self.train_count_data))[0] + next(iter(self.train_noncount_data))[0]
-        b_sz = len(train_data)
 
-        print(
-            f"[GPU{self.device}] Epoch {epoch} | Batchsize: {b_sz} | Steps: {len(train_data)}"
+        count_next = next(iter(self.train_count_data))
+        noncount_next = next(iter(self.train_noncount_data))
+        
+        if len(count_next) == 0 or len(noncount_next) == 0:
+            return
+        
+        b_sz = len(next(iter(self.train_count_data))[0]) + len(
+            next(iter(self.train_noncount_data))[0]
         )
 
+        print(
+            f"[GPU{self.device}] Epoch {epoch} | Batchsize: {b_sz} | Steps: {len(self.train_count_data) + len(self.train_noncount_data)}"
+        )
         total_steps = len(self.train_count_data) + len(self.train_noncount_data)
         self.total_steps = total_steps
         total_steps_mod_x = total_steps // self.eval_every
-        self.train_count_dataloader.sampler.set_epoch(floor(epoch))
-        self.train_noncount_dataloader.sampler.set_epoch(floor(epoch))
+        self.train_count_data.sampler.set_epoch(floor(epoch))
+        self.train_noncount_data.sampler.set_epoch(floor(epoch))
         epoch_total_loss = []
         epoch_ce_loss = []
         epoch_count_loss = []
@@ -448,7 +459,6 @@ class Experiment:
             loss_count_train.update({epoch + 1: epoch_count_loss})
 
         return
-
 
     def _evaluate(self, epoch):
 
