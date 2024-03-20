@@ -172,7 +172,7 @@ def validateAndPlot(model,
     cm_display = ConfusionMatrixDisplay(confusion_matrix = cf_matrix, display_labels = labels)
 
     cm_display.plot()
-    plt.savefig(os.path.join(wandb.run.dir, f"count.pdf"))
+    # plt.savefig(os.path.join(wandb.run.dir, f"count.pdf"))
     plt.show()
 
 def main():
@@ -250,15 +250,15 @@ def main():
                 convert_models_to_fp32(model)
                 optimizer.step()
                 clip.model.convert_weights(model)
-            wandb.log({"per_step_loss": total_loss.item()})
+            # wandb.log({"per_step_loss": total_loss.item()})
             pbar.set_description(f"Epoch {epoch}/{num_epochs}, Loss: {total_loss.item():.4f}")
 
         if (epoch+1) % 10 == 0:
-            torch.save(model.state_dict(), os.path.join(wandb.run.dir, f"model_{epoch}.pt"))
+            # torch.save(model.state_dict(), os.path.join(wandb.run.dir, f"model_{epoch}.pt"))
             with open(f'loss_data_{epoch}.npy', 'wb+') as f:
                 np.save(f, np.array(full_arr))
 
-        wandb.log({"per_epoch_loss": np.mean(loss_arr)})
+        # wandb.log({"per_epoch_loss": np.mean(loss_arr)})
         full_arr.append(loss_arr)
 
     # Validate
