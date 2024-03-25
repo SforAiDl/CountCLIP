@@ -6,6 +6,13 @@ This implementation is intended as a submission for the [Machine Learning Reprod
 
 > The model.ipynb notebook can be run directly in Google Colab for verifying our work.
 
+To run the Python script (recommended version python==3.10) run the following:
+> git clone https://github.com/Harshvardhan-Mestha/mlrc-2023.git  
+> cd mlrc-2023/scripts  
+> conda create -n <env_name> python=3.10  
+> pip install requirements.txt  
+> python3 experiment.py  
+
 #### Repository structure 
 
 * [count_set_gen.ipynb](https://github.com/Harshvardhan-Mestha/mlrc-2023/blob/main/count_set_gen.ipynb) contains the implementation for generating the counting set as described in Section 3.1 of the paper.
