@@ -6,7 +6,7 @@ This implementation is intended as a submission for the [Machine Learning Reprod
 
 > The model.ipynb notebook can be run directly in Google Colab for verifying our work.
 
-To run the Python script (recommended version python==3.10) run the following:
+To run the Python script (recommended version python==3.10) run the following, after downloading the dataset files in the scripts folder:
 > git clone https://github.com/Harshvardhan-Mestha/mlrc-2023.git  
 > cd mlrc-2023/scripts  
 > conda create -n <env_name> python=3.10  
