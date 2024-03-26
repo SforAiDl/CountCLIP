@@ -7,12 +7,12 @@ This repository contains the implementation of the paper [Teaching Clip to Count
  <br>Demo of our model learning to count
 </p>
 
-#### Usage
+### Usage
 
 
 Colab Demo: <a target="_blank" href="https://colab.research.google.com/github/Harshvardhan-Mestha/CountCLIP/blob/main/model.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
 
-To run the Python script (recommended version python==3.10), run the following after downloading the dataset files in the scripts folder:
+To run the Python script (recommended version python 3.10), run the following after downloading the dataset files in the scripts folder:
 ```
  git clone https://github.com/Harshvardhan-Mestha/mlrc-2023.git  
  cd mlrc-2023/scripts  
@@ -20,7 +20,7 @@ To run the Python script (recommended version python==3.10), run the following a
  pip install requirements.txt  
  python3 experiment.py  
 ```
-#### Repository structure 
+### Repository structure 
 
 * [count_set_gen.ipynb](https://github.com/Harshvardhan-Mestha/mlrc-2023/blob/main/count_set_gen.ipynb) contains the implementation for generating the counting set as described in Section 3.1 of the paper.
 * [model.ipynb](https://github.com/Harshvardhan-Mestha/mlrc-2023/blob/main/model.ipynb) contains the implementation for the counting loss function as described in Section 3.2 of the paper.
@@ -30,7 +30,7 @@ To run the Python script (recommended version python==3.10), run the following a
     * [parse_faulty.ipynb](https://github.com/Harshvardhan-Mestha/mlrc-2023/blob/main/data_utils/parse_faulty.ipynb) was used to compile non-functional images into a single file.
 * The folder [old](https://github.com/Harshvardhan-Mestha/mlrc-2023/blob/main/old) contains incomplete and outdated code used to make the final implementation.
 
-#### Dataset
+### Dataset
 
 We have created a small counting set of ~2000 images after passing over 2 million images out of the 400 million present in the original dataset.
 This is merged with ~13000 non-counting images from the same dataset. The entire merged dataset, along with the required relevant JSON/CSV files, can be found below.
@@ -43,4 +43,4 @@ This is merged with ~13000 non-counting images from the same dataset. The entire
 
 This implementation is intended as a submission for the [Machine Learning Reproducibility Challenge 2023](https://reproml.org/)
 
-####
+###
