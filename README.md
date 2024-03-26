@@ -7,11 +7,11 @@ This repository contains the implementation of the paper [Teaching Clip to Count
  <br>Demo of our model learning to count
 </p>
 
-This implementation is intended as a submission for the [Machine Learning Reproducibility Challenge 2023](https://reproml.org/)
+#### Usage
 
-```
-The model.ipynb notebook can be run directly in Google Colab to verify our work.
-```
+
+Colab Demo: <a target="_blank" href="https://colab.research.google.com/github/Harshvardhan-Mestha/CountCLIP/blob/main/model.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+
 To run the Python script (recommended version python==3.10), run the following after downloading the dataset files in the scripts folder:
 ```
  git clone https://github.com/Harshvardhan-Mestha/mlrc-2023.git  
@@ -41,3 +41,6 @@ This is merged with ~13000 non-counting images from the same dataset. The entire
 * [faulty.csv](https://drive.google.com/file/d/1es9gtEtl1yiX4DVFRI_Qi0fQg0R9qUO2/view?usp=drive_link) - CSV for removing faulty noncounting images.
 
 
+This implementation is intended as a submission for the [Machine Learning Reproducibility Challenge 2023](https://reproml.org/)
+
+####
