@@ -1,4 +1,4 @@
-# CLIPCount: [Re] Teaching Clip to Count to Ten
+# CountCLIP : [Re] Teaching Clip to Count to Ten
 
 This repository contains the implementation of the paper [Teaching Clip to Count to Ten](https://arxiv.org/abs/2302.12066) by Google Research, published in ICCV 2023. This paper presented a method to fine-tune Vision-Language Models (VLMs), like [CLIP](https://arxiv.org/abs/2103.00020), to improve zero-shot counting accuracy in an image while maintaining the performance for zero-shot classification by introducing a counting-contrastive loss term to the original loss function. This changes the training objective to discriminate between the correct and the incorrect captions associated with the object counts in an image.
 
@@ -15,7 +15,7 @@ Colab Demo: <a target="_blank" href="https://colab.research.google.com/github/Ha
 To run the Python script (recommended version python 3.10), run the following after downloading the dataset files in the scripts folder:
 ```
  git clone https://github.com/Harshvardhan-Mestha/mlrc-2023.git  
- cd mlrc-2023/scripts  
+ cd CountCLIP/scripts  
  conda create -n <env_name> python=3.10  
  pip install requirements.txt  
  python3 experiment.py  
