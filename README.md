@@ -43,4 +43,7 @@ This is merged with ~13000 non-counting images from the same dataset. The entire
 
 This implementation is intended as a submission for the [Machine Learning Reproducibility Challenge 2023](https://reproml.org/)
 
-###
+### Special Thanks
+* https://github.com/shashnkvats/Indofashionclip/tree/main
+* https://github.com/teaching-clip-to-count/teaching-clip-to-count.github.io/
+* https://github.com/ultralytics/ultralytics
