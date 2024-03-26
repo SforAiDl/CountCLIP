@@ -2,9 +2,13 @@
 
 This repository contains the implementation of the paper [Teaching Clip to Count to Ten](https://arxiv.org/abs/2302.12066) by Google Research, published in ICCV 2023. This paper presented a method to fine-tune Vision-Language Models (VLMs), like [CLIP](https://arxiv.org/abs/2103.00020), to improve zero-shot counting accuracy in an image while maintaining the performance for zero-shot classification by introducing a counting-contrastive loss term to the original loss function. This changes the training objective to discriminate between the correct and the incorrect captions associated with the object counts in an image.
 
-!["Demo of our model learning to count"](asset/demo.gif "Demo of our model learning to count")
+<p align="center">
+<img src="assets/demo.gif"  width="50%" hieght="50%" align="center" alt="Demo of our model learning to count">
+ <br>Demo of our model learning to count
+</p>
 
 This implementation is intended as a submission for the [Machine Learning Reproducibility Challenge 2023](https://reproml.org/)
+
 ```
 The model.ipynb notebook can be run directly in Google Colab to verify our work.
 ```
