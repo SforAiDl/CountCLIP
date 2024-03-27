@@ -41,7 +41,7 @@ def get_lambda(text : str,
         train_dataloader : torch.utils.data.DataLoader
             A DataLoader object containing the training data.
     '''
-
+    print(text)
     lmbda = 1
     l = list_counts
     n_count = len(train_dataloader)

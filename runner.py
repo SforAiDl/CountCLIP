@@ -20,8 +20,8 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 list_counts = []
-val_image_path = '/content/data/VAL'
-val_json_path = '/content/val.json'
+val_image_path = 'data/VAL'
+val_json_path = 'data/val.json'
 
 num2word = {1 : 'one', 2 : 'two', 3 : 'three', 4 : 'four', 5 : 'five',
             6 : 'six', 7 : 'seven', 8 : 'eight', 9 : 'nine', 10 : 'ten'}
@@ -34,9 +34,9 @@ def getDataloader():
     global list_counts
 
     # the following files will exist after the data is downloaded
-    json_path = '/content/merged.json'
-    image_path = '/content/data/merged'
-    faulty_path = '/content/faulty.csv'
+    json_path = 'data/merged.json'
+    image_path = 'data/merged'
+    faulty_path = 'data/faulty.csv'
 
     # Load the data
     print("Loading data...")
@@ -82,7 +82,7 @@ class TrainArgs:
     balanced_lambda : bool = True
     save_ckpt : bool = True
     num_epochs : int = 10
-    with_tracking : bool = True
+    with_tracking : bool = False
     scheduler : str = "original"
     resume_from_checkpoint : bool = False
     checkpoint_path : str = 'model_9.pt'
@@ -106,7 +106,16 @@ def parse_args():
     parser.add_argument("--checkpoint_path", type=str, default=args.checkpoint_path,
                         help="Path to checkpoint")
     input_args = parser.parse_args()
-    args.__dict__.update(input_args.__dict__)
+
+    args.balanced_lambda = input_args.balanced_lambda
+    args.save_ckpt = input_args.save_ckpt
+    args.num_epochs = input_args.num_epochs
+    args.with_tracking = input_args.with_tracking
+    args.scheduler = input_args.scheduler
+    args.resume_from_checkpoint = input_args.resume_from_checkpoint
+    args.checkpoint_path = input_args.checkpoint_path
+
+    return args
 
 def main(args : TrainArgs):
 
@@ -118,7 +127,7 @@ def main(args : TrainArgs):
 
     # wandb setup
     if args.with_tracking:
-        wandb.login()
+        wandb.login(key="63fd49f27aa7c2b522ef4a8b154cff56045bad07")
         wandb.init(project="clip", entity="wandb")
 
     '''This will download a checkpoint from a previous run
@@ -177,31 +186,31 @@ def main(args : TrainArgs):
         for batch in pbar:
 
             optimizer.zero_grad()
-            images, texts, cf_texts = batch
+            images, caption, cf_caption, text = batch
 
             images = images.to(device)
-            texts = texts.to(device)
-            cf_texts = cf_texts.to(device)
+            caption = caption.to(device)
+            cf_caption = cf_caption.to(device)
 
             encoded_imgs = model.encode_image(images)
-            encoded_texts = model.encode_text(texts)
-            encoded_cf_texts = model.encode_text(torch.unsqueeze(cf_texts[4], 0)) # use only the last element of the counterfactual captions (all are same, only for convinience)
+            encoded_caption = model.encode_text(caption)
+            encoded_cf_caption = model.encode_text(torch.unsqueeze(cf_caption[4], 0)) # use only the last element of the counterfactual captions (all are same, only for convinience)
 
             c_enc_imgs = encoded_imgs[4:]
-            c_enc_texts = encoded_texts[4:]
+            c_enc_caption = encoded_caption[4:]
 
             ei = c_enc_imgs
-            ek = c_enc_texts
-            ek_cf = encoded_cf_texts
+            ek = c_enc_caption
+            ek_cf = encoded_cf_caption
 
             counting_loss = count_loss(ei, ek, ek_cf)
 
             # Forward pass
-            logits_per_image, logits_per_text = model(images, texts)
+            logits_per_image, logits_per_text = model(images, caption)
 
             # get lambda
             if args.balanced_lambda:
-                lmbda = get_lambda(texts[4], list_counts, train_dataloader) # last item in each batch is the counting image
+                lmbda = get_lambda(text[4], list_counts, train_dataloader) # last item in each batch is the counting image
             else:
                 lmbda = 1
 

@@ -29,6 +29,7 @@ class imageTitleDataset(Dataset):
         
         # Initialize image paths and corresponding texts
         self.image_path = list_image_path
+        self.text = list_txt
         # Tokenize text using CLIP's tokenizer
         self.caption  = clip.tokenize(list_txt)
         self.cf_caption = clip.tokenize(list_txt_cf)
@@ -43,7 +44,8 @@ class imageTitleDataset(Dataset):
 
         # Preprocess image using CLIP's preprocessing function
         image = self.preprocess(Image.open(self.image_path[idx]))
+        text = self.text[idx]
         caption = self.caption[idx]
         cf_caption = self.cf_caption[idx]
 
-        return image, caption, cf_caption
+        return image, caption, cf_caption, text

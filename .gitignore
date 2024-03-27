@@ -1,0 +1,10 @@
+# user defined
+data/
+__pycache__/
+*.out
+
+# zip files
+*.zip
+
+# wandb
+wandb/
