@@ -7,6 +7,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 class imageTitleDataset(Dataset):
+    
     def __init__(self, 
                  list_image_path,
                  list_txt,
@@ -15,13 +16,15 @@ class imageTitleDataset(Dataset):
         '''
         Arguments
         ---------
-
         list_image_path
             A list of image paths
         list_txt
             A list of true captions
         list_txt_cf
             A list of counterfactual captions
+
+        Preprocesses images and tokenizes texts using CLIP's 
+        preprocessing function and tokenizer.
         '''
         
         # Initialize image paths and corresponding texts

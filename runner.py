@@ -1,62 +1,38 @@
 import os
 import json
 import wandb
-import random
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import ConfusionMatrixDisplay
+from argparse import ArgumentParser
 
 from tqdm import tqdm
 from tqdm import trange
 
-from dataset import image_title_dataset
+from dataset import imageTitleDataset
+from utils import *
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
 import clip
-from PIL import Image
 from PIL import ImageFile
-from transformers import CLIPProcessor, CLIPModel
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-# wandb setup
-''' You can uncomment these lines to use wandb
-wandb.login()
-wandb.init(project="clip", entity="wandb")
-'''
-
-'''This will download a checkpoint from a previous run
-api = wandb.Api()
-run = api.run("<account>/<project>/<run_id>")
-run.file("model.pt").download()
-'''
+list_counts = []
+val_image_path = '/content/data/VAL'
+val_json_path = '/content/val.json'
 
 num2word = {1 : 'one', 2 : 'two', 3 : 'three', 4 : 'four', 5 : 'five',
             6 : 'six', 7 : 'seven', 8 : 'eight', 9 : 'nine', 10 : 'ten'}
 
-def generate_caps(cap,
-                  count,
-                  counterfactual=False):
-  val_caps = []
-  if counterfactual==False:
-    for c in list(set(range(1,11)) - set([1])):
-      val_cap = cap.replace(num2word[count],num2word[c])
-      val_caps.append(val_cap)
+def getDataloader():
+    '''
+    Returns a dataloader for the training data.
+    '''
 
-  if counterfactual==True:
-    l = list(set(range(1,11)) - set([1,count]))
-    n = random.choice(l)
-    val_caps = cap.replace(num2word[count],num2word[n])
+    global list_counts
 
-  return val_caps
-
-def get_dataloader():
-    
     # the following files will exist after the data is downloaded
     json_path = '/content/merged.json'
     image_path = '/content/data/merged'
@@ -70,7 +46,7 @@ def get_dataloader():
             obj = json.loads(line)
             input_data.append(obj)
 
-    faulty = pd.read_csv(faulty_path)
+    faulty = pd.read_csv(faulty_path) # Contains image paths known not to exist
     indexes = list(faulty["index"])
     json_strs = list(faulty["json_str"])
 
@@ -84,119 +60,103 @@ def get_dataloader():
 
     for item in input_data:
         img_path = image_path +str('/')+ item['pths'].split('/')[-1]
-        caption = item['caps'][:110]
-        # caption = item['caps']
+        caption = item['caps'][:110] # Limit caption length to 110 characters
         counts = item['counts']
 
-        if counts>0:
-            cf_cap = generate_caps(caption.lower(),counts,counterfactual=True)
-            list_txt_cf.extend([cf_cap] * 5)
+        if counts > 0: # if it's a counting image, get the counterfactual captions
+            cf_cap = generate_caps(caption.lower(), counts, counterfactual=True)
+            list_txt_cf.extend([cf_cap] * 5) # indexing convinience
 
+        list_counts.append(counts)
         list_image_path.append(img_path)
         list_txt.append(caption)
 
-    dataset = image_title_dataset(list_image_path, list_txt, list_txt_cf)
+    dataset = imageTitleDataset(list_image_path, list_txt, list_txt_cf)
     train_dataloader = DataLoader(dataset, batch_size=5, shuffle=False) #Define your own dataloader
+    # Note, changing batch_size is more involved because we need to maintain a fixed ratio between
+    # counting and non-counting images (here 1:4).
 
     return train_dataloader
 
-def count_loss(ei,
-               ek,
-               ek_cf):
+class TrainArgs:
+    balanced_lambda : bool = True
+    save_ckpt : bool = True
+    num_epochs : int = 10
+    with_tracking : bool = True
+    scheduler : str = "original"
+    resume_from_checkpoint : bool = False
+    checkpoint_path : str = 'model_9.pt'
 
-    ei = torch.squeeze(ei).to(torch.float64)
-    ek = torch.squeeze(ek).to(torch.float64)
-    ek_cf = torch.squeeze(ek_cf).to(torch.float64)
+def parse_args():
 
-    loss = -torch.log(torch.exp(torch.dot(ei,ek))/(torch.exp(torch.dot(ei,ek))+torch.exp(torch.dot(ei,ek_cf))))
+    args = TrainArgs()
+    parser = ArgumentParser()   
+    parser.add_argument("--balanced_lambda", action="store_true", default=args.balanced_lambda,
+                        help="Use balanced lambda for counting loss")
+    parser.add_argument("--save_ckpt", action="store_true", default=args.save_ckpt,
+                        help="Save model checkpoints")
+    parser.add_argument("--num_epochs", type=int, default=args.num_epochs,
+                        help="Number of epochs")
+    parser.add_argument("--with_tracking", action="store_true", default=args.with_tracking,
+                        help="Use wandb for tracking")
+    parser.add_argument("--scheduler", type=str, default=args.scheduler, choices=["linear", "cosine", "original"],
+                        help="Scheduler to use")
+    parser.add_argument("--resume_from_checkpoint", action="store_true", default=args.resume_from_checkpoint,
+                        help="Resume training from a checkpoint")
+    parser.add_argument("--checkpoint_path", type=str, default=args.checkpoint_path,
+                        help="Path to checkpoint")
+    input_args = parser.parse_args()
+    args.__dict__.update(input_args.__dict__)
 
-    return loss
-
-# Function to convert model's parameters to FP32 format
-def convert_models_to_fp32(model):
-    for p in model.parameters():
-        p.data = p.data.float()
-        p.grad.data = p.grad.data.float()
-
-def validateAndPlot(model,
-                    preprocess,
-                    device):
-    
-    val_image_path = '/content/data/VAL'
-    val_json_path = '/content/val.json'
-    
-    with open(val_json_path, 'r') as f:
-        val_input_data = []
-        for line in f:
-            obj = json.loads(line)
-            val_input_data.append(obj)
-    all_sims = []
-    c = 0
-
-    with torch.no_grad():
-        for i in trange(len(val_input_data)):
-            try:
-                sims = []
-                img = Image.open(val_input_data[i]['pths'])
-                val_caps = generate_caps(val_input_data[i]['caps'].lower(),val_input_data[i]['counts'])
-                x = preprocess(img).to(device)
-                encoded_image = model.encode_image(torch.unsqueeze(x, 0))
-                encoded_image = encoded_image.to(device)
-
-                for j in range(9):
-                    tokenized_text = clip.tokenize(val_caps[j]).to(device)
-                    encoded_text = model.encode_text(tokenized_text)
-                    encoded_text = encoded_text.to(device)
-
-                    similarity = torch.cosine_similarity(encoded_text, encoded_image)
-                    sims.append(float(similarity))
-                all_sims.append((sims,val_input_data[i]['counts']))
-            except:
-                c=c+1
-                pass
-    
-    y = []
-    y_pred = []
-
-    for i in range(len(all_sims)):
-        y_pred.append(all_sims[i][0].index(max(all_sims[i][0]))+2)
-        y.append(all_sims[i][1])
-
-    lbls = []
-    for i in range(len(np.unique(y))):
-        lbls.append(num2word[np.unique(y)[i]])
-
-    labels = lbls
-
-    cf_matrix = confusion_matrix(y, y_pred)
-    cm_display = ConfusionMatrixDisplay(confusion_matrix = cf_matrix, display_labels = labels)
-
-    cm_display.plot()
-    # plt.savefig(os.path.join(wandb.run.dir, f"count.pdf"))
-    plt.show()
-
-def main():
+def main(args : TrainArgs):
 
     # Load model
     print("Loading model...")
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device {device}")
     model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 
+    # wandb setup
+    if args.with_tracking:
+        wandb.login()
+        wandb.init(project="clip", entity="wandb")
+
+    '''This will download a checkpoint from a previous run
+    api = wandb.Api()
+    run = api.run("<account>/<project>/<run_id>")
+    run.file("model.pt").download()
+    '''
+
     # Load checkpoint
-    # checkpoint = torch.load('model_9.pt')
-    # model.load_state_dict(checkpoint)
+    if args.resume_from_checkpoint:
+        checkpoint = torch.load(args.checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint)
 
     # Get dataloader
-    train_dataloader = get_dataloader()
+    train_dataloader = getDataloader()
 
     # Prepare the optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-6,betas=(0.9,0.98),eps=5e-6,weight_decay=0.2) # the lr is smaller, more safe for fine tuning to new dataset
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-6,betas=(0.9,0.98), eps=5e-6, weight_decay=0.2) # the lr is smaller, more safe for fine tuning to new dataset
 
     # Prepare the scheduler (None by default)
-    # linear = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=5e-6, total_iters=25)
-    # cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,T_0=5,last_epoch=50)
-    # scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer, schedulers=[linear,cosine], milestones=[25])
+    if isinstance(args.scheduler, str):
+        if args.scheduler == "linear":
+            scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=5e-6, total_iters=25)
+        elif args.scheduler == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, last_epoch=50)
+        elif args.scheduler == "original":
+            linear = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=5e-6, total_iters=25)
+            cosine = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, last_epoch=50)
+            scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer, schedulers=[linear,cosine], milestones=[25])
+        else:
+            raise ValueError("Invalid scheduler")
+    else:
+        scheduler = None
+        print("No scheduler specified, whereas the original paper recommends using both linear and cosine schedulers.")
+
+    if not args.balanced_lambda:
+        print("Balanced lambda not specified, using default value of 1. It is recommended to use this setting as \
+              it evens out the strong class imbalance in the dataset. (~2000+ images with 2 and ~8 images with 10)")
 
     # Loss
     loss_img = nn.CrossEntropyLoss()
@@ -204,19 +164,20 @@ def main():
 
     print("Training...")
 
-    # Training loop
     # Train the model
     full_arr = []
     loss_arr = []
-    num_epochs = 10
+    val_loss_arr = []
 
-    for epoch in range(num_epochs):
+    # Training loop
+    for epoch in range(args.num_epochs):
         pbar = tqdm(train_dataloader, total=len(train_dataloader))
         loss_arr = []
+
         for batch in pbar:
 
             optimizer.zero_grad()
-            images,texts,cf_texts = batch
+            images, texts, cf_texts = batch
 
             images = images.to(device)
             texts = texts.to(device)
@@ -224,7 +185,7 @@ def main():
 
             encoded_imgs = model.encode_image(images)
             encoded_texts = model.encode_text(texts)
-            encoded_cf_texts = model.encode_text(torch.unsqueeze(cf_texts[4], 0))
+            encoded_cf_texts = model.encode_text(torch.unsqueeze(cf_texts[4], 0)) # use only the last element of the counterfactual captions (all are same, only for convinience)
 
             c_enc_imgs = encoded_imgs[4:]
             c_enc_texts = encoded_texts[4:]
@@ -233,33 +194,60 @@ def main():
             ek = c_enc_texts
             ek_cf = encoded_cf_texts
 
-            counting_loss = count_loss(ei,ek,ek_cf)
+            counting_loss = count_loss(ei, ek, ek_cf)
 
             # Forward pass
             logits_per_image, logits_per_text = model(images, texts)
 
+            # get lambda
+            if args.balanced_lambda:
+                lmbda = get_lambda(texts[4], list_counts, train_dataloader) # last item in each batch is the counting image
+            else:
+                lmbda = 1
+
             # Compute loss
             ground_truth = torch.arange(len(images),dtype=torch.long,device=device)
-            total_loss = ((loss_img(logits_per_image,ground_truth) + loss_txt(logits_per_text,ground_truth))/2) + counting_loss
+            total_loss = ((loss_img(logits_per_image,ground_truth) + loss_txt(logits_per_text,ground_truth))/2) + lmbda*counting_loss
             loss_arr.append(total_loss.item())
             # Backward pass
             total_loss.backward()
+
             if device == "cpu":
                 optimizer.step()
             else:
                 convert_models_to_fp32(model)
                 optimizer.step()
                 clip.model.convert_weights(model)
-            # wandb.log({"per_step_loss": total_loss.item()})
-            pbar.set_description(f"Epoch {epoch}/{num_epochs}, Loss: {total_loss.item():.4f}")
+
+            if scheduler is not None:
+                scheduler.step()
+            
+            if args.with_tracking:
+                wandb.log({"per_step_train_loss": total_loss.item()})
+                wandb.log({"running_train_loss": sum(loss_arr)/len(loss_arr)})
+
+            pbar.set_description(f"Epoch {epoch}/{args.num_epochs}, Loss: {total_loss.item():.4f}")
 
         if (epoch+1) % 10 == 0:
-            # torch.save(model.state_dict(), os.path.join(wandb.run.dir, f"model_{epoch}.pt"))
-            with open(f'loss_data_{epoch}.npy', 'wb+') as f:
-                np.save(f, np.array(full_arr))
 
-        # wandb.log({"per_epoch_loss": np.mean(loss_arr)})
-        full_arr.append(loss_arr)
+            if args.save_ckpt:
+                torch.save(model.state_dict(), os.path.join(wandb.run.dir, f"model_{epoch}.pt"))
+                torch.save(optimizer.state_dict(), os.path.join(wandb.run.dir, f"optimizer_{epoch}.pt"))
+                if args.scheduler:
+                    torch.save(scheduler.state_dict(), os.path.join(wandb.run.dir, f"scheduler_{epoch}.pt"))
 
-    # Validate
-    validateAndPlot(model, preprocess, device)
+        full_arr.extend(loss_arr)
+        pbar.set_description(f"Epoch {epoch}/{args.num_epochs}, Loss: {sum(loss_arr)/len(loss_arr):.4f}")
+
+        y, y_pred, val_loss, val_acc, f1_scores = get_preds(val_json_path, model, preprocess, device, args.balanced_lambda)
+        val_loss_arr.append(val_loss)
+        store_cf_norm(y,y_pred,epoch)
+
+        print(f"Validation Loss: {val_loss}")
+        print(f"Validation Accuracy: {val_acc}")
+        if args.with_tracking:
+            wandb.log({"per_epoch_val_loss": val_loss})
+            wandb.log({"per_epoch_val_acc": val_acc})
+
+        for i in range(len(f1_scores)) and args.with_tracking:
+            wandb.log({f"f1_score_class{i}": f1_scores[i]})
