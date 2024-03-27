@@ -251,3 +251,8 @@ def main(args : TrainArgs):
 
         for i in range(len(f1_scores)) and args.with_tracking:
             wandb.log({f"f1_score_class{i}": f1_scores[i]})
+
+
+if __name__ == '__main__':
+    args = parse_args()
+    main(args)
