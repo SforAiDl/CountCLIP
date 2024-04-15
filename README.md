@@ -14,7 +14,7 @@ Colab Demo: <a target="_blank" href="https://colab.research.google.com/github/Ha
 
 To run the Python script (recommended version python 3.10), run the following after downloading the dataset files in the scripts folder:
 ```
- git clone https://github.com/Harshvardhan-Mestha/mlrc-2023.git  
+ git clone https://github.com/SforAiDl/CountCLIP.git
  cd CountCLIP/scripts  
  conda create -n <env_name> python=3.10  
  pip install requirements.txt  
