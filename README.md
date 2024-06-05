@@ -24,12 +24,13 @@ Open model.ipynb and run all the cells
 ### Dataset
 
 We have created a small counting set of ~2000 images after passing over 2 million images out of the 400 million present in the original dataset.
-This is merged with ~13000 non-counting images from the same dataset. The entire merged dataset, along with the required relevant JSON/CSV files, can be found below.
+This is merged with ~13000 non-counting images from the same dataset. The entire merged dataset, along with the required relevant JSON/CSV files, can be found here [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10981852.svg)](https://doi.org/10.5281/zenodo.10981852)
+.
 
-* [data.zip](https://drive.google.com/file/d/1UG_bXl_vgCdVq3kgf8Y-StXPCttlpFAG/view?usp=sharing) - merged counting and noncounting data, along with the validation data (the [CountBench](https://github.com/teaching-clip-to-count/teaching-clip-to-count.github.io/blob/main/CountBench.json) dataset).
-* [merged.json](https://drive.google.com/file/d/13mdK-jX_eDNa5v-HB34WOS3WNHSru_ir/view?usp=drive_link) - JSON for merged (counting+noncounting) data.
-* [val.json](https://drive.google.com/file/d/1h9FV9dVvcvLo97reN9_2dbg0QFKyVED2/view?usp=drive_link) - JSON for the CountBench data.
-* [faulty.csv](https://drive.google.com/file/d/1es9gtEtl1yiX4DVFRI_Qi0fQg0R9qUO2/view?usp=drive_link) - CSV for removing faulty noncounting images.
+* data.zip - merged counting and noncounting data, along with the validation data (the [CountBench](https://github.com/teaching-clip-to-count/teaching-clip-to-count.github.io/blob/main/CountBench.json) dataset).
+* merged.json - JSON for merged (counting+noncounting) data.
+* val.json - JSON for the CountBench data.
+* faulty.csv - CSV for removing faulty noncounting images.
 
 
 
